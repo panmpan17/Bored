@@ -1,9 +1,11 @@
 import os
+import random
 
+from utlities import Terminal
 from time import sleep
 from subprocess import call
 
-M_1 = """ /$$      /$$
+M_TOP_RIGHT = """ /$$      /$$
 | $$$    /$$$
 | $$$$  /$$$$
 | $$ $$/$$ $$
@@ -12,7 +14,7 @@ M_1 = """ /$$      /$$
 | $$ \\/  | $$
 |__/     |__/"""
 
-M_2 = """$$\\      $$\\
+M_TOP_LEFT = """$$\\      $$\\
 $$$\\    $$$ |
 $$$$\\  $$$$ |
 $$\\$$\\$$ $$ |
@@ -21,7 +23,7 @@ $$ |\\$  /$$ |
 $$ | \\_/ $$ |
 \\__|     \\__|"""
 
-M_3 = """ __       __ 
+M_BOTTOM_LEFT = """ __       __ 
 /  \\     /  |
 $$  \\   /$$ |
 $$$  \\ /$$$ |
@@ -31,7 +33,7 @@ $$ |$$$/ $$ |
 $$ | $/  $$ |
 $$/      $$/ """
 
-M_4 = """ __       __ 
+M_BOTTOM_RIGHT = """ __       __ 
 |  \\     /  \\
 | $$\\   /  $$
 | $$$\\ /  $$$
@@ -81,9 +83,13 @@ class App:
 
         self.screen_width, self.screen_height = os.get_terminal_size()
 
-        self.worl_blocks = [WordBlock(M_1), WordBlock(M_2), WordBlock(M_3), WordBlock(M_4)]
-        self.current_word_block = self.worl_blocks[0]
-        self.worl_block_index = 0
+        self.top_left = WordBlock(M_TOP_LEFT)
+        self.top_right = WordBlock(M_TOP_RIGHT)
+        self.bottom_left = WordBlock(M_BOTTOM_LEFT)
+        self.bottom_right = WordBlock(M_BOTTOM_RIGHT)
+        self.current_word_block = self.bottom_right
+
+        self.current_color = f"\033[38;5;{random.randint(0, 255)}m"
 
     def run(self):
         try:
@@ -102,7 +108,7 @@ class App:
             print()
 
         for line in self.current_word_block.lines:
-            print((self.x * " ") + line)
+            print(self.current_color + (self.x * " ") + line + Terminal.END)
 
         self.x += self.direction_x
         self.y += self.direction_y
@@ -116,14 +122,22 @@ class App:
             self.switch_word_block()
     
     def switch_word_block(self):
-        self.worl_block_index = (self.worl_block_index + 1) % len(self.worl_blocks)
-        self.current_word_block = self.worl_blocks[self.worl_block_index]
+        if self.direction_x == 1 and self.direction_y == 1:
+            self.current_word_block = self.bottom_right
+        elif self.direction_x == 1 and self.direction_y == -1:
+            self.current_word_block = self.top_right
+        elif self.direction_x == -1 and self.direction_y == 1:
+            self.current_word_block = self.bottom_left
+        elif self.direction_x == -1 and self.direction_y == -1:
+            self.current_word_block = self.top_left
 
         if self.x + self.current_word_block.width > self.screen_width:
             self.x = self.screen_width - self.current_word_block.width
         
         if self.y + self.current_word_block.height + 1 > self.screen_height:
             self.y = self.screen_height - self.current_word_block.height - 1
+        
+        self.current_color = f"\033[38;5;{random.randint(0, 255)}m"
 
 
 
