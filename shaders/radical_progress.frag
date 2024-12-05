@@ -11,28 +11,25 @@ uniform float u_timeScale = 0.1;
 uniform float u_time;
 uniform vec2 u_resolution;
 
+const float FULL_PI = 3.14159265 * 2.0;
+
 float mod(float a, float b)
 {
     return a - b * floor(a / b);
 }
 
-float radical_progress(float angleOffset, vec2 center)
+float radical_progress(vec2 pos, float angleOffset, vec2 center)
 {
-    vec2 st = gl_FragCoord.xy / u_resolution.xy;
-
-    vec2 centeredUV = st - center;
-
-    float fullPi = 2.0 * 3.14159265;
-    float angle = mod(atan(centeredUV.y, centeredUV.x) + angleOffset, fullPi);
-
-    return angle / fullPi;
+    vec2 centeredUV = pos - center;
+    float angle = mod(atan(centeredUV.y, centeredUV.x) + angleOffset, FULL_PI);
+    return angle / FULL_PI;
 }
 
 void main()
 {
-    vec2 st = gl_FragCoord.xy / u_resolution.xy;
-    vec4 textColor = texture2D(u_tex0, st);
-    textColor.w *= step(mod(u_timeScale * u_time, 1), 1 - radical_progress(-1.570796325, vec2(0.5)));
+    vec2 pos = gl_FragCoord.xy / u_resolution.xy;
+    vec4 textColor = texture2D(u_tex0, pos);
+    textColor.w *= step(mod(u_timeScale * u_time, 1), 1 - radical_progress(pos, -1.570796325, vec2(0.5)));
     gl_FragColor = textColor;
 }
 
