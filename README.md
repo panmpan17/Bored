@@ -14,7 +14,7 @@ Run shader without texture map as input.
 `glslviewer shares/basic_uv.frag`
 
 Run shader with texture map as input.
-`glslviewer shares/ripple.frag text.png`
+`glslviewer shares/ripple.frag test.png`
 
 ## Python curses
 
