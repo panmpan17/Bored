@@ -6,6 +6,7 @@ import curses
 
 from pprint import pprint
 from torch.utils.data import Dataset, DataLoader
+from argparse import ArgumentParser
 
 
 class TicTacToeBoard:
@@ -160,13 +161,13 @@ class NeuralNetworkController:
             except Exception as e:
                 pass
     
-    def start_training(self):
+    def start_training(self, train_time: int = 100):
         self.model.train()
 
         loss_fn = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
 
-        for epoch in range(20):
+        for epoch in range(train_time):
             for batch, label in self.data_loader:
                 X, y = batch.to(self.device), label.to(self.device)
 
@@ -285,19 +286,36 @@ class TicTacToeGame:
                 self.current_player = 2
             else:
                 self.current_player = 1
+        elif key == 27:  # Escape
+            self.board.board = [0 for _ in range(9)]
+            self.current_player = 1
 
     
 
 
 if __name__ == "__main__":
-    controller = NeuralNetworkController()
-    controller.evaluate_accuracy()
-    controller.start_training()
-    controller.evaluate_accuracy()
-    # controller.test_data()
+    parser = ArgumentParser()
 
-    # game = TicTacToeGame(controller)
-    # curses.wrapper(TicTacToeGame.static_run)
+    sub = parser.add_subparsers(dest="command")
+
+    train_parser = sub.add_parser("train", help="Train the model")
+    train_parser.add_argument("-t", "--time", type=int, default=100, help="Time to train the model")
+
+    train_parser = sub.add_parser("test", help="Test the model")
+
+    args = parser.parse_args()
+
+    if args.command == "train":
+        controller = NeuralNetworkController()
+        controller.evaluate_accuracy()
+        controller.start_training(args.time)
+        controller.evaluate_accuracy()
+    
+    elif args.command == "test":
+        controller = NeuralNetworkController()
+
+        game = TicTacToeGame(controller)
+        curses.wrapper(TicTacToeGame.static_run)
 
 
 
