@@ -1,9 +1,10 @@
 import csv
 import torch
 import pandas
+import os
 
 from pprint import pprint
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 
 class TicTacToeBoard:
@@ -104,7 +105,88 @@ class CustomStarDataset(Dataset):
     
     # This returns given an index the i-th sample and label
     def __getitem__(self, idx):
-        return self.dataset[idx],self.labels[idx]
+        return self.dataset[idx], self.labels[idx]
 
 
-dataset = CustomStarDataset()
+class NeuralNetworkModel(torch.nn.Module):
+    def __init__(self):
+        super(NeuralNetworkModel, self).__init__()
+        self.model = torch.nn.Sequential(
+            torch.nn.Flatten(),
+            torch.nn.Linear(9, 128),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.1),
+            torch.nn.Linear(128, 32),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.1),
+            torch.nn.Linear(32, 1),
+        )
+
+    def forward(self, x):
+        z = self.model(x)
+        return torch.nn.functional.log_softmax(z, dim=1)
+    
+
+class NeuralNetworkController:
+    @property
+    def save_file_name(self):
+        return "tictactoe_model.pth"
+
+    def __init__(self):
+        dataset = CustomStarDataset()
+        self.data_loader = DataLoader(dataset, batch_size=32, shuffle=True, drop_last=True)
+
+        self.device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+        self.model = NeuralNetworkModel().to(self.device)
+
+        if os.path.exists(self.save_file_name):
+            self.model.load_state_dict(torch.load(self.save_file_name))
+    
+    def start_training(self):
+        self.model.train()
+
+        loss_fn = torch.nn.CrossEntropyLoss()
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
+
+        for epoch in range(10):
+            for batch, label in self.data_loader:
+                X, y = batch.to(self.device), label.to(self.device)
+
+                optimizer.zero_grad()
+                output = self.model(X)
+                # print(X)
+                # print(output)
+                # print(y)
+                loss = loss_fn(output, y)
+                loss.backward()
+                optimizer.step()
+
+            print(f"Epoch {epoch + 1} completed")
+
+        torch.save(self.model.state_dict(), "tictactoe_model.pth")
+
+    def test(self):
+        loss_fn = torch.nn.CrossEntropyLoss()
+
+        size = len(self.data_loader.dataset)
+        num_batches = len(self.data_loader)
+        self.model.eval()
+        test_loss, correct = 0, 0
+        with torch.no_grad():
+            for X, y in self.data_loader:
+                X, y = X.to(self.device), y.to(self.device)
+                pred = self.model(X)
+                test_loss += loss_fn(pred, y).item()
+                correct += (pred.argmax(1) == y).type(torch.float).sum().item()
+        test_loss /= num_batches
+        correct /= size
+        print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
+
+
+if __name__ == "__main__":
+    controller = NeuralNetworkController()
+    controller.test()
+    controller.start_training()
+    controller.test()
+
+
