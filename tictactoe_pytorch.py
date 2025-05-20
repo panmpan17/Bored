@@ -1,8 +1,10 @@
+import time
 import csv
 import torch
 import pandas
 import os
 import curses
+import random
 
 from pprint import pprint
 from torch.utils.data import Dataset, DataLoader
@@ -10,7 +12,7 @@ from argparse import ArgumentParser
 
 
 class TicTacToeBoard:
-    SYMBOLS = {0: " ", 1: "X", 2: "O"}
+    SYMBOLS = {0: " ", 1: "O", 2: "X"}
 
     def __init__(self, board_string: str = None):
         self.board = [0 for _ in range(9)]
@@ -74,34 +76,34 @@ class TicTacToeBoard:
         return lines
 
 
-def create_trainning_data():
-    boards = []
+class GameResultDataset(Dataset):
+    @staticmethod
+    def create_trainning_data():
+        boards = []
 
-    def recursive_all_possible_boards(prevboard_string: str, depth: int = 0):
-        global boards
+        def recursive_all_possible_boards(prevboard_string: str, depth: int = 0):
+            global boards
 
-        for choice in range(3):
-            if choice == 0:
-                new_board_string = prevboard_string + "0"
-            elif choice == 1:
-                new_board_string = prevboard_string + "1"
-            else:
-                new_board_string = prevboard_string + "2"
+            for choice in range(3):
+                if choice == 0:
+                    new_board_string = prevboard_string + "0"
+                elif choice == 1:
+                    new_board_string = prevboard_string + "1"
+                else:
+                    new_board_string = prevboard_string + "2"
 
-            if len(new_board_string) == 9:
-                boards.append(TicTacToeBoard(new_board_string))
-            else:
-                recursive_all_possible_boards(new_board_string, depth + 1)
+                if len(new_board_string) == 9:
+                    boards.append(TicTacToeBoard(new_board_string))
+                else:
+                    recursive_all_possible_boards(new_board_string, depth + 1)
 
-    recursive_all_possible_boards("")
+        recursive_all_possible_boards("")
 
-    writer = csv.writer(open("tictactoe_boards.csv", "w"))
-    writer.writerow(["a", "b", "c", "d", "e", "f", "g", "h", "i", "winner"])
-    for board in boards:
-        writer.writerow(board.to_csv_row())
+        writer = csv.writer(open("tictactoe_boards.csv", "w"))
+        writer.writerow(["a", "b", "c", "d", "e", "f", "g", "h", "i", "winner"])
+        for board in boards:
+            writer.writerow(board.to_csv_row())
 
-
-class CustomStarDataset(Dataset):
     # This loads the data and converts it, make data rdy
     def __init__(self):
         # load data
@@ -124,9 +126,9 @@ class CustomStarDataset(Dataset):
         return self.dataset[idx], self.labels[idx]
 
 
-class NeuralNetworkModel(torch.nn.Module):
+class CheckGameResultModel(torch.nn.Module):
     def __init__(self):
-        super(NeuralNetworkModel, self).__init__()
+        super(CheckGameResultModel, self).__init__()
         self.model = torch.nn.Sequential(
             torch.nn.Flatten(),
             torch.nn.Linear(9, 128),
@@ -143,17 +145,17 @@ class NeuralNetworkModel(torch.nn.Module):
         return torch.nn.functional.log_softmax(z, dim=1)
     
 
-class NeuralNetworkController:
+class GameResultNeuralNetworkController:
     @property
     def save_file_name(self):
         return "tictactoe_model.pth"
 
     def __init__(self):
-        dataset = CustomStarDataset()
+        dataset = GameResultDataset()
         self.data_loader = DataLoader(dataset, batch_size=32, shuffle=True, drop_last=True)
 
         self.device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
-        self.model = NeuralNetworkModel().to(self.device)
+        self.model = CheckGameResultModel().to(self.device)
 
         if os.path.exists(self.save_file_name):
             try:
@@ -223,7 +225,7 @@ class TicTacToeGame:
     def static_run(stdscr):
         TicTacToeGame.instance.run(stdscr)
 
-    def __init__(self, network: NeuralNetworkController):
+    def __init__(self, network: GameResultNeuralNetworkController, ai_player = None):
         TicTacToeGame.instance = self
 
         self.network = network
@@ -233,6 +235,8 @@ class TicTacToeGame:
         self.selected_index = (0, 0)
 
         self.stdscr = None
+
+        self.ai_player = ai_player
     
     def run(self, stdscr):
         self.stdscr = stdscr
@@ -255,11 +259,15 @@ class TicTacToeGame:
         for i, line in enumerate(lines):
             self.stdscr.addstr(i, 0, line)
         
+        start = time.time()
         actual_winner = self.board.get_winner()
-        self.stdscr.addstr(4, 0, f"Actual Winner: {TicTacToeBoard.SYMBOLS[actual_winner]}")
+        delta = time.time() - start
+        self.stdscr.addstr(4, 0, f"Actual Winner: {TicTacToeBoard.SYMBOLS[actual_winner]} ({delta:.2f}s)")
 
+        start = time.time()
         predict_winner = self.network.check_board_result(self.board)
-        self.stdscr.addstr(5, 0, f"Predict Winner: {TicTacToeBoard.SYMBOLS[predict_winner]}")
+        delta = time.time() - start
+        self.stdscr.addstr(5, 0, f"Predict Winner: {TicTacToeBoard.SYMBOLS[predict_winner]} ({delta:.2f}s)")
         
         self.stdscr.refresh()
     
@@ -286,11 +294,31 @@ class TicTacToeGame:
                 self.current_player = 2
             else:
                 self.current_player = 1
+            
+            if self.ai_player:
+                move = self.ai_player.get_move(self.board)
+                if move != -1:
+                    self.board.set_piece(move, self.current_player)
+                    if self.current_player == 1:
+                        self.current_player = 2
+                    else:
+                        self.current_player = 1
+
         elif key == 27:  # Escape
             self.board.board = [0 for _ in range(9)]
             self.current_player = 1
 
+
+class DumAIPlayer:
+    def __init__(self, player: int):
+        self.player = player
     
+    def get_move(self, board: TicTacToeBoard):
+        indexes = [i for i in range(9) if board.board[i] == 0]
+        if len(indexes) == 0:
+            return -1
+        return random.choice(indexes)
+
 
 
 if __name__ == "__main__":
@@ -306,15 +334,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.command == "train":
-        controller = NeuralNetworkController()
+        controller = GameResultNeuralNetworkController()
         controller.evaluate_accuracy()
         controller.start_training(args.time)
         controller.evaluate_accuracy()
     
     elif args.command == "test":
-        controller = NeuralNetworkController()
+        controller = GameResultNeuralNetworkController()
 
-        game = TicTacToeGame(controller)
+        dum_ai = DumAIPlayer(2)
+        game = TicTacToeGame(controller, dum_ai)
         curses.wrapper(TicTacToeGame.static_run)
 
 
