@@ -12,7 +12,7 @@ from argparse import ArgumentParser
 
 
 class TicTacToeBoard:
-    SYMBOLS = {0: " ", 1: "O", 2: "X"}
+    SYMBOLS = {0: " ", 1: "O", 2: "X", 3: "T"}
 
     def __init__(self, board_string: str = None):
         self.board = [0 for _ in range(9)]
@@ -56,6 +56,8 @@ class TicTacToeBoard:
         for a, b, c in winning_positions:
             if self.board[a] == self.board[b] == self.board[c] != 0:
                 return self.board[a]
+        if all(x != 0 for x in self.board):
+            return 3
         return 0
 
     def to_csv_row(self):
@@ -148,7 +150,7 @@ class CheckGameResultModel(torch.nn.Module):
 class GameResultNeuralNetworkController:
     @property
     def save_file_name(self):
-        return "tictactoe_model.pth"
+        return "output/tictactoe_model.pth"
 
     def __init__(self):
         dataset = GameResultDataset()
@@ -320,6 +322,166 @@ class DumAIPlayer:
         return random.choice(indexes)
 
 
+class TicTacToeAIPlayer(torch.nn.Module):
+    device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+
+    def __init__(self, player: int):
+        super(TicTacToeAIPlayer, self).__init__()
+        # Input data, first is which player the ai is, the following 9 are the board
+        self.model = torch.nn.Sequential(
+            torch.nn.Flatten(),
+            torch.nn.Linear(10, 128),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.1),
+            torch.nn.Linear(128, 32),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.1),
+            torch.nn.Linear(32, 9),
+        )
+        self.player = player
+
+        self.to(self.device)
+    
+    def forward(self, x):
+        z = self.model(x)
+        return torch.nn.functional.log_softmax(z, dim=1)
+
+    def mutate(self, mutate_rate: float = 0.05):
+        for param in self.model.parameters():
+            if param.requires_grad:
+                param.data += torch.randn(param.size()).to(self.device) * mutate_rate
+
+    def get_move(self, board: TicTacToeBoard):
+        # print([self.player] + board.board)
+        ai_prediction = self.model(torch.tensor([[self.player] + board.board]).float().to(TicTacToeAIPlayer.device))
+        return ai_prediction.argmax(1).item()
+
+
+class AIBattleController:
+    def __init__(self, ai_player1: TicTacToeAIPlayer, ai_player2: TicTacToeAIPlayer):
+        if ai_player1 is not None:
+            ai_player1.player = 1
+        if ai_player2 is not None:
+            ai_player2.player = 2
+        self.ai_player1 = ai_player1
+        self.ai_player2 = ai_player2
+        self.board = TicTacToeBoard()
+
+        self.current_player = 1
+        self.winner = 0
+
+        self.point_for_1 = 0
+        self.point_for_2 = 0
+    
+    def reset(self):
+        self.board.board = [0 for _ in range(9)]
+        self.current_player = 1
+        self.winner = 0
+        self.point_for_1 = 0
+        self.point_for_2 = 0
+    
+    def run(self):
+        while True:
+            if self.current_player == 1:
+                move = self.ai_player1.get_move(self.board)
+                self.point_for_1 += 10
+            else:
+                move = self.ai_player2.get_move(self.board)
+                self.point_for_2 += 10
+
+            if not self.board.set_piece(move, self.current_player):
+                # The move is invalid, the game is over
+                if self.current_player == 1:
+                    self.point_for_1 -= 5
+                else:
+                    self.point_for_2 -= 5
+                break
+
+            self.winner = self.board.get_winner()
+            if self.winner == 1:
+                self.point_for_1 += 100
+                break
+            elif self.winner == 2:
+                self.point_for_2 += 100
+                break
+            elif self.winner == 3: # draw
+                self.point_for_1 += 10
+                # Accommadate player 2 move is fewer
+                self.point_for_2 += 20
+                break
+
+            if self.current_player == 1:
+                self.current_player = 2
+            else:
+                self.current_player = 1
+
+
+class EvolutionTraining:
+    def __init__(self, population_size: int = 100, top_population = 5, evaluate_game_count=20, mutation_rate: float = 0.05):
+        self.population_size = population_size
+        self.top_population = top_population
+        self.mutation_rate = mutation_rate
+        self.evaluate_game_count = evaluate_game_count
+
+        self.population = [TicTacToeAIPlayer(i) for i in range(population_size)]
+        self.battle_controller = AIBattleController(None, DumAIPlayer(2))
+        self.generation = 0
+    
+    @property
+    def json_info_file(self):
+        return f"output/tic_tac_toe_evolution/info.json"
+
+    def evaluate_population(self):
+        scores = []
+        for i, ai in enumerate(self.population):
+            avg_score = self.evaluate_one_ai(ai)
+            scores.append((i, avg_score))
+        
+        print(f"Generation {self.generation} completed, evaluating population...")
+        scores.sort(key=lambda x: x[1], reverse=True)
+        scores = scores[:self.top_population]
+
+        print("Top population scores:", ",".join([str(score) for _, score in scores]))
+        
+        new_population = []
+
+        mutate_per_top_population = self.population_size // self.top_population
+        print(mutate_per_top_population)
+        for i, score in scores:
+            ai = self.population[i]
+            new_population.append(ai)
+
+            for i in range(mutate_per_top_population - 1):
+                new_ai = TicTacToeAIPlayer(ai.player)
+                new_ai.load_state_dict(ai.state_dict())
+                new_ai.mutate(self.mutation_rate)
+                new_population.append(new_ai)
+        
+        for i in range(self.population_size - len(new_population)):
+            random_ai = self.population[random.choice(scores)[0]]
+
+            new_ai = TicTacToeAIPlayer(random_ai.player)
+            new_ai.load_state_dict(random_ai.state_dict())
+            new_ai.mutate(self.mutation_rate)
+            new_population.append(new_ai)
+        
+        print(f"New population size: {len(new_population)} reading for next generation")
+        self.population = new_population
+
+    
+    def evaluate_one_ai(self, ai: TicTacToeAIPlayer):
+        self.battle_controller.reset()
+        self.battle_controller.ai_player1 = ai
+
+        scores = []
+        for i in range(self.evaluate_game_count):
+            self.battle_controller.run()
+            scores.append(self.battle_controller.point_for_1)
+            self.battle_controller.reset()
+
+        return sum(scores) / self.evaluate_game_count
+        
+
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -329,7 +491,11 @@ if __name__ == "__main__":
     train_parser = sub.add_parser("train", help="Train the model")
     train_parser.add_argument("-t", "--time", type=int, default=100, help="Time to train the model")
 
-    train_parser = sub.add_parser("test", help="Test the model")
+    evolution = sub.add_parser("evolution", help="Train the model using evolution")
+
+    test_parser = sub.add_parser("test", help="Test the model")
+
+    game_parser = sub.add_parser("game", help="Test the model")
 
     args = parser.parse_args()
 
@@ -339,7 +505,23 @@ if __name__ == "__main__":
         controller.start_training(args.time)
         controller.evaluate_accuracy()
     
+    elif args.command == "evolution":
+        traning = EvolutionTraining(population_size=100, top_population=5, mutation_rate=0.05)
+        for i in range(10):
+            traning.evaluate_population()
+    
     elif args.command == "test":
+        board = TicTacToeBoard()
+        ai = TicTacToeAIPlayer(1)
+
+        battle_controller = AIBattleController(ai, DumAIPlayer(2))
+        for i in range(50):
+            battle_controller.run()
+            battle_controller.board.pretty_print()
+            print(f"Winner: {TicTacToeBoard.SYMBOLS[battle_controller.winner]}, Points 1: {battle_controller.point_for_1}, Points 2 {battle_controller.point_for_2}")
+            battle_controller.reset()
+    
+    elif args.command == "game":
         controller = GameResultNeuralNetworkController()
 
         dum_ai = DumAIPlayer(2)
