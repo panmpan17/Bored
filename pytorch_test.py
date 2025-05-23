@@ -60,7 +60,7 @@ class NeuralNetwork(nn.Module):
 class CustomModelMain:
     def __init__(self):
         self.model = NeuralNetwork().to(device)
-        self.model.load_state_dict(torch.load("model.pth", weights_only=True))
+        self.model.load_state_dict(torch.load("output/model.pth", weights_only=True))
         print(self.model)
 
     def start_training(self):
@@ -73,8 +73,8 @@ class CustomModelMain:
             self.train_once(train_dataloader, loss_fn, optimizer)
         print("Done!")
 
-        torch.save(self.model.state_dict(), "model.pth")
-        print("Saved PyTorch Model State to model.pth")
+        torch.save(self.model.state_dict(), "output/model.pth")
+        print("Saved PyTorch Model State to output/model.pth")
 
     def train_once(self, dataloader, loss_fn, optimizer):
         size = len(dataloader.dataset)

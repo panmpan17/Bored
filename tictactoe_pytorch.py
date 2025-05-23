@@ -329,12 +329,29 @@ class TicTacToeAIPlayer(torch.nn.Module):
     def __init__(self, player: int):
         super(TicTacToeAIPlayer, self).__init__()
         # Input data, first is which player the ai is, the following 9 are the board
+        # self.model = torch.nn.Sequential(
+        #     torch.nn.Flatten(),
+        #     torch.nn.Linear(10, 128),
+        #     torch.nn.ReLU(),
+        #     torch.nn.Dropout(0.1),
+        #     torch.nn.Linear(128, 32),
+        #     torch.nn.ReLU(),
+        #     torch.nn.Dropout(0.1),
+        #     torch.nn.Linear(32, 9),
+        # )
+
         self.model = torch.nn.Sequential(
             torch.nn.Flatten(),
-            torch.nn.Linear(10, 128),
+            torch.nn.Linear(10, 64),
             torch.nn.ReLU(),
             torch.nn.Dropout(0.1),
-            torch.nn.Linear(128, 32),
+            torch.nn.Linear(64, 128),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.1),
+            torch.nn.Linear(128, 64),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.1),
+            torch.nn.Linear(64, 32),
             torch.nn.ReLU(),
             torch.nn.Dropout(0.1),
             torch.nn.Linear(32, 9),
@@ -550,6 +567,9 @@ class EvolutionTraining:
             return
         
         folder = os.path.dirname(self.json_info_file)
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
         files = []
         for i, score in self.scores[:self.top_population]:
             ai = self.population[i]
