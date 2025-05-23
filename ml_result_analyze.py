@@ -51,7 +51,7 @@ class ResultAnalyzer:
     
     def show(self):
         for name, data in self.scatter_datas.items():
-            # plt.scatter(data["scatter_x"], data["scatter_y"], label=name)
+            plt.scatter(data["scatter_x"], data["scatter_y"], label=name, alpha=0.5, sizes=np.array([1]*len(data["scatter_x"])))
             plt.plot(data["avg_y"], label=name + " avg", color="red")
         
         plt.xlabel("Generation")
