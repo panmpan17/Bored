@@ -50,9 +50,19 @@ class ResultAnalyzer:
         }
     
     def show(self):
+        colors = ["red", "blue", "green", "orange", "purple", "brown"]
+        secondary_colors = ["pink", "lightblue", "lightgreen", "yellow", "violet", "tan"]
+        count = 0
         for name, data in self.scatter_datas.items():
-            plt.scatter(data["scatter_x"], data["scatter_y"], label=name, alpha=0.5, sizes=np.array([1]*len(data["scatter_x"])))
-            plt.plot(data["avg_y"], label=name + " avg", color="red")
+            color = colors[count % len(colors)]
+            plt.scatter(data["scatter_x"],
+                        data["scatter_y"],
+                        label=name,
+                        alpha=0.1,
+                        color=secondary_colors[count % len(secondary_colors)],
+                        sizes=np.array([1]*len(data["scatter_x"])))
+            plt.plot(data["avg_y"], label=name + " avg", color=color)
+            count += 1
         
         plt.xlabel("Generation")
         plt.ylabel("Score")
@@ -65,7 +75,8 @@ if __name__ == "__main__":
     # test()
     analyzer = ResultAnalyzer()
 
-    analyzer.read_from_info_json("first_test", "output/tic_tac_toe_evolution_1/info.json")
-    analyzer.read_from_info_json("sencond_test", "output/tic_tac_toe_evolution/info.json")
+    # analyzer.read_from_info_json("first", "output/tic_tac_toe_evolution_1/info.json")
+    analyzer.read_from_info_json("second", "output/tic_tac_toe_evolution/info.json")
+    # analyzer.read_from_info_json("third", "output/tic_tac_toe_evolution_3/info.json")
     
     analyzer.show()

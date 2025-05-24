@@ -298,7 +298,8 @@ class TicTacToeGame:
             else:
                 self.current_player = 1
             
-            if self.ai_player:
+            winner = self.board.get_winner()
+            if self.ai_player and (winner == 0 or winner == 3):
                 move = self.ai_player.get_move(self.board)
                 if move != -1:
                     self.board.set_piece(move, self.current_player)
@@ -313,10 +314,56 @@ class TicTacToeGame:
 
 
 class DumAIPlayer:
-    def __init__(self, player: int):
+    def __init__(self, player: int, smartness: int = 1):
         self.player = player
+        self.smartness = smartness  # 1: dumb, 2: smart
     
     def get_move(self, board: TicTacToeBoard):
+        if self.smartness == 0:
+            move = self.get_random_move(board)
+        elif self.smartness == 1:
+            move = self.get_success(board)
+            if move == -1:
+                move = self.get_random_move(board)
+        return move
+
+    def get_success(self, board: TicTacToeBoard):
+        winning_positions = [
+            (0, 1, 2), (3, 4, 5), (6, 7, 8), # rows
+            (0, 3, 6), (1, 4, 7), (2, 5, 8), # columns
+            (0, 4, 8), (2, 4, 6)            # diagonals
+        ]
+
+        potential_moves = []
+        for positions in winning_positions:
+            player_1_moves = []
+            player_2_moves = []
+            empty_moves = []
+
+            for pos in positions:
+                if board.board[pos] == 1:
+                    player_1_moves.append(pos)
+                elif board.board[pos] == 2:
+                    player_2_moves.append(pos)
+                else:
+                    empty_moves.append(pos)
+            
+            if len(player_1_moves) == 2 and len(empty_moves) == 1:
+                return empty_moves[0]
+            elif len(player_2_moves) == 2 and len(empty_moves) == 1:
+                return empty_moves[0]
+            
+            if len(player_1_moves) == 1 and len(empty_moves) == 2:
+                potential_moves.append(empty_moves[0])
+                potential_moves.append(empty_moves[1])
+        
+        if len(potential_moves) > 0:
+            return random.choice(potential_moves)
+        
+        return -1
+
+    
+    def get_random_move(self, board: TicTacToeBoard):
         indexes = [i for i in range(9) if board.board[i] == 0]
         if len(indexes) == 0:
             return -1
@@ -443,8 +490,9 @@ class EvolutionTraining:
 
         self.scores = []
         self.population = []
-        self.battle_controller = AIBattleController(None, DumAIPlayer(2))
+        self.battle_controller = AIBattleController(None, None)
         self.generation = 1
+        self.ai_trainning_opponent = DumAIPlayer(2)
 
         self.history = []
 
@@ -552,13 +600,21 @@ class EvolutionTraining:
 
     def evaluate_one_ai(self, ai: TicTacToeAIPlayer):
         self.battle_controller.reset()
-        self.battle_controller.ai_player1 = ai
 
         scores = []
+        play_first = True
         for i in range(self.evaluate_game_count):
+            if play_first:
+                self.battle_controller.ai_player1 = ai
+                self.battle_controller.ai_player2 = self.ai_trainning_opponent
+            else:
+                self.battle_controller.ai_player1 = self.ai_trainning_opponent
+                self.battle_controller.ai_player2 = ai
+
             self.battle_controller.run()
             scores.append(self.battle_controller.point_for_1)
             self.battle_controller.reset()
+            play_first = not play_first
 
         return sum(scores) / self.evaluate_game_count
 
@@ -639,7 +695,7 @@ if __name__ == "__main__":
 
         dum_ai = DumAIPlayer(2)
         test_ai = TicTacToeAIPlayer(1)
-        test_ai.load_state_dict(torch.load("output/tic_tac_toe_evolution/ai_117_84.pth"))
+        test_ai.load_state_dict(torch.load("output/tic_tac_toe_evolution/ai_1404_183.pth"))
 
         game = TicTacToeGame(controller, test_ai)
         curses.wrapper(TicTacToeGame.static_run)
