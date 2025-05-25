@@ -437,6 +437,12 @@ class AIBattleController:
 
         self.point_for_1 = 0
         self.point_for_2 = 0
+
+        self.winning_positions = [
+            (0, 1, 2), (3, 4, 5), (6, 7, 8), # rows
+            (0, 3, 6), (1, 4, 7), (2, 5, 8), # columns
+            (0, 4, 8), (2, 4, 6)            # diagonals
+        ]
     
     def reset(self):
         self.board.board = [0 for _ in range(9)]
@@ -444,8 +450,8 @@ class AIBattleController:
         self.winner = 0
         self.point_for_1 = 0
         self.point_for_2 = 0
-    
-    def run(self):
+
+    def run_original(self):
         while True:
             if self.current_player == 1:
                 move = self.ai_player1.get_move(self.board)
@@ -474,6 +480,73 @@ class AIBattleController:
                 # Accommadate player 2 move is fewer
                 self.point_for_2 += 20
                 break
+
+            if self.current_player == 1:
+                self.current_player = 2
+            else:
+                self.current_player = 1
+    
+    def run(self):
+        while True:
+            if self.current_player == 1:
+                move = self.ai_player1.get_move(self.board)
+                self.point_for_1 += 10
+            else:
+                move = self.ai_player2.get_move(self.board)
+                self.point_for_2 += 10
+
+            if not self.board.set_piece(move, self.current_player):
+                # The move is invalid, the game is over
+                if self.current_player == 1:
+                    self.point_for_1 -= 25
+                else:
+                    self.point_for_2 -= 25
+                break
+
+            self.winner = self.board.get_winner()
+            if self.winner == 1:
+                self.point_for_1 += 100
+                self.point_for_2 -= 5
+                break
+            elif self.winner == 2:
+                self.point_for_2 += 100
+                self.point_for_1 -= 5
+                break
+            elif self.winner == 3: # draw
+                self.point_for_1 += 10
+                # Accommadate player 2 move is fewer
+                self.point_for_2 += 20
+                break
+
+            # Check for potential winner
+            player_1_potential_win = 0
+            player_2_potential_win = 0
+            for positions in self.winning_positions:
+                player_1_moves = []
+                player_2_moves = []
+                empty_moves = []
+
+                for pos in positions:
+                    if self.board.board[pos] == 1:
+                        player_1_moves.append(pos)
+                    elif self.board.board[pos] == 2:
+                        player_2_moves.append(pos)
+                    else:
+                        empty_moves.append(pos)
+                    
+                if len(player_1_moves) == 2 and len(empty_moves) == 1:
+                    player_1_potential_win += 1
+                elif len(player_2_moves) == 2 and len(empty_moves) == 1:
+                    player_2_potential_win += 1
+            
+            if player_1_potential_win == 1:
+                self.point_for_1 += 5
+            elif player_1_potential_win == 2:
+                self.point_for_1 += 30
+            if player_2_potential_win == 1:
+                self.point_for_2 += 5
+            elif player_2_potential_win == 2:
+                self.point_for_2 += 30
 
             if self.current_player == 1:
                 self.current_player = 2
@@ -695,7 +768,7 @@ if __name__ == "__main__":
 
         dum_ai = DumAIPlayer(2)
         test_ai = TicTacToeAIPlayer(1)
-        test_ai.load_state_dict(torch.load("output/tic_tac_toe_evolution/ai_1404_183.pth"))
+        test_ai.load_state_dict(torch.load("output/tic_tac_toe_evolution/ai_599_204.pth"))
 
         game = TicTacToeGame(controller, test_ai)
         curses.wrapper(TicTacToeGame.static_run)
