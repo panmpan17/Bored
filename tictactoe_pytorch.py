@@ -554,21 +554,48 @@ class AIBattleController:
                 self.current_player = 1
 
 
-class EvolutionTraining:
-    def __init__(self, population_size: int = 100, top_population = 5, evaluate_game_count=20, mutation_rate: float = 0.05):
+class GeneralEvolutionTrainingBase:
+    def __init__(self, model_class: type,
+                 population_size: int = 100, top_population: int = 5,
+                 evaluate_count: int = 20, mutation_rate: float = 0.05,
+                 output_folder: str = "output/general_evolution"):
+        self.model_class = model_class
+
         self.population_size = population_size
         self.top_population = top_population
+        self.evaluate_count = evaluate_count
         self.mutation_rate = mutation_rate
-        self.evaluate_game_count = evaluate_game_count
+        self.output_folder = output_folder
 
         self.scores = []
+        self.scores_reverse = True
+
         self.population = []
-        self.battle_controller = AIBattleController(None, None)
         self.generation = 1
-        self.ai_trainning_opponent = DumAIPlayer(2)
-
         self.history = []
+    
+    @property
+    def json_info_file(self):
+        return os.path.join(self.output_folder, "info.json")
+    
+    def load_info(self):
+        if os.path.exists(self.json_info_file):
+            with open(self.json_info_file, "r") as f:
+                data = json.load(f)
+                self.generation = data["generation"]
+                self.history = data["history"]
+    
+    def dump_info(self):
+        if not os.path.exists(self.output_folder):
+            os.makedirs(self.output_folder)
+        
+        data = {}
+        data["generation"] = self.generation
+        data["history"] = self.history
 
+        with open(self.json_info_file, "w") as f:
+            json.dump(data, f, indent=4)
+    
     def init_population(self):
         files = []
         for generation_data in self.history:
@@ -581,53 +608,33 @@ class EvolutionTraining:
             folder = os.path.dirname(self.json_info_file)
             mutate_per_top_population = self.population_size // self.top_population
             for file in files:
-                ai = TicTacToeAIPlayer(1)
+                ai = self.model_class(1)
                 ai.load_state_dict(torch.load(os.path.join(folder, file)))
                 self.population.append(ai)
 
                 for i in range(mutate_per_top_population - 1):
-                    new_ai = TicTacToeAIPlayer(ai.player)
+                    new_ai = self.model_class(ai.player)
                     new_ai.load_state_dict(ai.state_dict())
                     new_ai.mutate(self.mutation_rate)
                     self.population.append(new_ai)
             
+            self.generation += 1
+            
         else:
             print("Loading population from scratch")
             self.init_random_population()
-
+    
     def init_random_population(self):
-        self.population = [TicTacToeAIPlayer(i) for i in range(self.population_size)]
-    
-    def load_info(self):
-        if os.path.exists(self.json_info_file):
-            with open(self.json_info_file, "r") as f:
-                data = json.load(f)
-                self.generation = data["generation"]
-                self.history = data["history"]
-    
-    def dump_info(self):
-        if not os.path.exists("output/tic_tac_toe_evolution"):
-            os.makedirs("output/tic_tac_toe_evolution")
-        
-        data = {}
-        data["generation"] = self.generation
-        data["history"] = self.history
+        self.population = [self.model_class(i) for i in range(self.population_size)]
 
-        with open(self.json_info_file, "w") as f:
-            json.dump(data, f, indent=4)
-    
-    @property
-    def json_info_file(self):
-        return f"output/tic_tac_toe_evolution/info.json"
-
-    def evaluate_population(self):
+    def evaluate_generation_populations(self):
         self.scores = []
         for i, ai in enumerate(self.population):
-            avg_score = self.evaluate_one_ai(ai)
+            avg_score = self.evaluate_one_population(ai)
             self.scores.append((i, avg_score))
         
         print(f"Generation {self.generation} completed, evaluating population...")
-        self.scores.sort(key=lambda x: x[1], reverse=True)
+        self.scores.sort(key=lambda x: x[1], reverse=self.scores_reverse)
         print("Top population scores:", ",".join([str(score) for _, score in self.scores[:self.top_population]]))
 
         generation_data = {}
@@ -638,9 +645,30 @@ class EvolutionTraining:
         generation_data["params"]["population_size"] = self.population_size
         generation_data["params"]["top_population"] = self.top_population
         generation_data["params"]["mutation_rate"] = self.mutation_rate
-        generation_data["params"]["evaluate_game_count"] = self.evaluate_game_count
+        generation_data["params"]["evaluate_count"] = self.evaluate_count
 
         self.history.append(generation_data)
+    
+    def evaluate_one_population(self, model):
+        raise NotImplementedError("This method should be implemented in the subclass")
+
+    def save_top_population(self):
+        if len(self.scores) == 0:
+            return
+        
+        folder = os.path.dirname(self.json_info_file)
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
+        files = []
+        for i, score in self.scores[:self.top_population]:
+            ai = self.population[i]
+            file_name = f"ai_{self.generation}_{i}.pth"
+            files.append(file_name)
+            ai_file = os.path.join(folder, file_name)
+            torch.save(ai.state_dict(), ai_file)
+        
+        self.history[-1]["files"] = files
 
     def next_generation(self):
         scores = self.scores[:self.top_population]
@@ -671,12 +699,28 @@ class EvolutionTraining:
         self.generation += 1
         self.scores.clear()
 
-    def evaluate_one_ai(self, ai: TicTacToeAIPlayer):
+class EvolutionTraining(GeneralEvolutionTrainingBase):
+    def __init__(self, model_class: type = TicTacToeAIPlayer,
+                 population_size: int = 100, top_population: int = 5,
+                 evaluate_count: int = 20, mutation_rate: float = 0.05,
+                 output_folder: str = "output/tic_tac_toe_evolution"):
+
+        super().__init__(model_class,
+                         population_size=population_size,
+                         top_population=top_population,
+                         evaluate_count=evaluate_count,
+                         mutation_rate=mutation_rate,
+                         output_folder=output_folder)
+
+        self.battle_controller = AIBattleController(None, None)
+        self.ai_trainning_opponent = DumAIPlayer(2)
+    
+    def evaluate_one_population(self, ai: TicTacToeAIPlayer):
         self.battle_controller.reset()
 
         scores = []
         play_first = True
-        for i in range(self.evaluate_game_count):
+        for i in range(self.evaluate_count):
             if play_first:
                 self.battle_controller.ai_player1 = ai
                 self.battle_controller.ai_player2 = self.ai_trainning_opponent
@@ -689,25 +733,7 @@ class EvolutionTraining:
             self.battle_controller.reset()
             play_first = not play_first
 
-        return sum(scores) / self.evaluate_game_count
-
-    def save_top_population(self):
-        if len(self.scores) == 0:
-            return
-        
-        folder = os.path.dirname(self.json_info_file)
-        if not os.path.exists(folder):
-            os.makedirs(folder)
-
-        files = []
-        for i, score in self.scores[:self.top_population]:
-            ai = self.population[i]
-            file_name = f"ai_{self.generation}_{i}.pth"
-            files.append(file_name)
-            ai_file = os.path.join(folder, file_name)
-            torch.save(ai.state_dict(), ai_file)
-        
-        self.history[-1]["files"] = files
+        return sum(scores) / self.evaluate_count
 
 
 if __name__ == "__main__":
@@ -738,14 +764,16 @@ if __name__ == "__main__":
         controller.evaluate_accuracy()
     
     elif args.command == "evolution":
-        training = EvolutionTraining(population_size=args.population, top_population=args.top,
-                                    mutation_rate=args.mutation, evaluate_game_count=args.evaluate)
+        training = EvolutionTraining(TicTacToeAIPlayer,
+                                     population_size=args.population, top_population=args.top,
+                                     mutation_rate=args.mutation, evaluate_count=args.evaluate,
+                                     output_folder="output/test")
 
         training.load_info()
         training.init_population()
         
         for i in range(args.generation):
-            training.evaluate_population()
+            training.evaluate_generation_populations()
             if i != args.generation - 1:
                 training.next_generation()
         
