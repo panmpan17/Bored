@@ -10,6 +10,7 @@ import json
 from pprint import pprint
 from torch.utils.data import Dataset, DataLoader
 from argparse import ArgumentParser
+from progress_bar import ProgressBar
 
 
 class TicTacToeBoard:
@@ -573,6 +574,8 @@ class GeneralEvolutionTrainingBase:
         self.population = []
         self.generation = 1
         self.history = []
+
+        self.progress_bar = ProgressBar(self.population_size, prefix="Generation 0 ")
     
     @property
     def json_info_file(self):
@@ -629,11 +632,13 @@ class GeneralEvolutionTrainingBase:
 
     def evaluate_generation_populations(self):
         self.scores = []
+        self.progress_bar.set_prefix(f"Generation {self.generation} ")
+        self.progress_bar.reset(print_=True)
         for i, ai in enumerate(self.population):
             avg_score = self.evaluate_one_population(ai)
             self.scores.append((i, avg_score))
+            self.progress_bar.increment(True)
         
-        print(f"Generation {self.generation} completed, evaluating population...")
         self.scores.sort(key=lambda x: x[1], reverse=self.scores_reverse)
         print("Top population scores:", ",".join([str(score) for _, score in self.scores[:self.top_population]]))
 
@@ -698,6 +703,16 @@ class GeneralEvolutionTrainingBase:
         self.population = new_population
         self.generation += 1
         self.scores.clear()
+
+    def start_generation_training(self, generation_count: int = 10):
+        for i in range(args.generation):
+            training.evaluate_generation_populations()
+            if i != args.generation - 1:
+                training.next_generation()
+        
+        training.save_top_population()
+        training.dump_info()
+
 
 class EvolutionTraining(GeneralEvolutionTrainingBase):
     def __init__(self, model_class: type = TicTacToeAIPlayer,
@@ -771,14 +786,7 @@ if __name__ == "__main__":
 
         training.load_info()
         training.init_population()
-        
-        for i in range(args.generation):
-            training.evaluate_generation_populations()
-            if i != args.generation - 1:
-                training.next_generation()
-        
-        training.save_top_population()
-        training.dump_info()
+        training.start_generation_training(args.generation)
     
     elif args.command == "test":
         board = TicTacToeBoard()
