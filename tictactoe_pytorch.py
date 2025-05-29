@@ -782,7 +782,7 @@ if __name__ == "__main__":
         training = EvolutionTraining(TicTacToeAIPlayer,
                                      population_size=args.population, top_population=args.top,
                                      mutation_rate=args.mutation, evaluate_count=args.evaluate,
-                                     output_folder="output/test")
+                                     output_folder="output/tic_tac_toe_evolution")
 
         training.load_info()
         training.init_population()
@@ -802,9 +802,16 @@ if __name__ == "__main__":
     elif args.command == "game":
         controller = GameResultNeuralNetworkController()
 
+        folder = "output/tic_tac_toe_evolution"
+        training = EvolutionTraining(TicTacToeAIPlayer, output_folder=folder)
+        training.load_info()
+
+        # print(training.history[-1]["files"])
+        file = training.history[-1]["files"][0]
+
         dum_ai = DumAIPlayer(2)
         test_ai = TicTacToeAIPlayer(1)
-        test_ai.load_state_dict(torch.load("output/tic_tac_toe_evolution/ai_599_204.pth"))
+        test_ai.load_state_dict(torch.load(os.path.join(folder, file)))
 
         game = TicTacToeGame(controller, test_ai)
         curses.wrapper(TicTacToeGame.static_run)

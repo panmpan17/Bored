@@ -19,7 +19,7 @@ class ResultAnalyzer:
     def __init__(self):
         self.scatter_datas = {}
 
-    def read_from_info_json(self, name, info_json_path):
+    def read_from_info_json(self, name, info_json_path, trend_window=10):
         with open(info_json_path, "r") as f:
             data = json.load(f)
 
@@ -28,6 +28,9 @@ class ResultAnalyzer:
 
         avg_x = []
         avg_y = []
+
+        trend_x = []
+        trend_y = []
 
         for history_data in data["history"]:
             generation = history_data["generation"]
@@ -39,14 +42,21 @@ class ResultAnalyzer:
                 _sum += score
 
             avg_x.append(generation)
-            avg_y.append(_sum / len(scores))
+            avg = _sum / len(scores)
+            avg_y.append(avg)
+
+            if len(avg_y) >= trend_window:
+                trend_x.append(generation)
+                trend_y.append(sum(avg_y[len(avg_y) - trend_window:]) / trend_window)
 
         
         self.scatter_datas[name] = {
             "scatter_x": np.array(scatter_x),
             "scatter_y": np.array(scatter_y),
             "avg_x": np.array(avg_x),
-            "avg_y": np.array(avg_y)
+            "avg_y": np.array(avg_y),
+            "trend_x": np.array(trend_x),
+            "trend_y": np.array(trend_y)
         }
     
     def show(self):
@@ -62,6 +72,10 @@ class ResultAnalyzer:
                         color=secondary_colors[count % len(secondary_colors)],
                         sizes=np.array([1]*len(data["scatter_x"])))
             plt.plot(data["avg_y"], label=name + " avg", color=color)
+
+            if len(data["trend_y"]) > 0:
+                plt.plot(data["trend_x"], data["trend_y"], label=name + " trend", color=colors[(count + 1) % len(colors)], linestyle='--')
+
             count += 1
         
         plt.xlabel("Generation")
