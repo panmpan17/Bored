@@ -229,7 +229,7 @@ class TicTacToeGame:
     def static_run(stdscr):
         TicTacToeGame.instance.run(stdscr)
 
-    def __init__(self, network: GameResultNeuralNetworkController, ai_player = None):
+    def __init__(self, network: GameResultNeuralNetworkController, player_1 = None, player_2 = None):
         TicTacToeGame.instance = self
 
         self.network = network
@@ -240,7 +240,8 @@ class TicTacToeGame:
 
         self.stdscr = None
 
-        self.ai_player = ai_player
+        self.player_1 = player_1
+        self.player_2 = player_2
     
     def run(self, stdscr):
         self.stdscr = stdscr
@@ -293,25 +294,46 @@ class TicTacToeGame:
             if self.selected_index[1] > 2:
                 self.selected_index = (self.selected_index[0], 0)
         elif key == 10:  # Enter
-            self.board.set_piece(self.selected_index, self.current_player)
-            if self.current_player == 1:
-                self.current_player = 2
-            else:
-                self.current_player = 1
-            
-            winner = self.board.get_winner()
-            if self.ai_player and (winner == 0 or winner == 3):
-                move = self.ai_player.get_move(self.board)
-                if move != -1:
-                    self.board.set_piece(move, self.current_player)
-                    if self.current_player == 1:
-                        self.current_player = 2
-                    else:
-                        self.current_player = 1
+            self.trigger_next_move()
 
         elif key == 27:  # Escape
             self.board.board = [0 for _ in range(9)]
             self.current_player = 1
+    
+    def trigger_next_move(self):
+        if self.current_player == 1:
+            if self.player_1 is None:
+                self.board.set_piece(self.selected_index, self.current_player)
+            else:
+                move = self.player_1.get_move(self.board)
+                if move != -1:
+                    self.board.set_piece(move, self.current_player)
+            
+            winner = self.board.get_winner()
+            if winner != 0:
+                return
+
+            self.current_player = 2
+
+            if self.player_1 is None and self.player_2 is not None:
+                self.trigger_next_move()
+
+        else:
+            if self.player_2 is None:
+                self.board.set_piece(self.selected_index, self.current_player)
+            else:
+                move = self.player_2.get_move(self.board)
+                if move != -1:
+                    self.board.set_piece(move, self.current_player)
+                
+            winner = self.board.get_winner()
+            if winner != 0:
+                return
+
+            self.current_player = 1
+
+            if self.player_2 is None and self.player_1 is not None:
+                self.trigger_next_move()
 
 
 class DumAIPlayer:
@@ -336,6 +358,7 @@ class DumAIPlayer:
         ]
 
         potential_moves = []
+        urgent_moves = []
         for positions in winning_positions:
             player_1_moves = []
             player_2_moves = []
@@ -349,15 +372,24 @@ class DumAIPlayer:
                 else:
                     empty_moves.append(pos)
             
-            if len(player_1_moves) == 2 and len(empty_moves) == 1:
-                return empty_moves[0]
-            elif len(player_2_moves) == 2 and len(empty_moves) == 1:
-                return empty_moves[0]
+            if len(empty_moves) == 1:
+                if len(player_1_moves) == 2:
+                    if self.player == 1:
+                        urgent_moves.append(empty_moves[0])
+                    else:
+                        return empty_moves[0]
+                elif len(player_2_moves) == 2:
+                    if self.player == 2:
+                        urgent_moves.append(empty_moves[0])
+                    else:
+                        return empty_moves[0]
             
             if len(player_1_moves) == 1 and len(empty_moves) == 2:
                 potential_moves.append(empty_moves[0])
                 potential_moves.append(empty_moves[1])
         
+        if len(urgent_moves) > 0:
+            return random.choice(urgent_moves)
         if len(potential_moves) > 0:
             return random.choice(potential_moves)
         
@@ -507,6 +539,43 @@ class AIBattleController:
             self.winner = self.board.get_winner()
             if self.winner == 1:
                 self.point_for_1 += 100
+                self.point_for_2 -= 10
+                break
+            elif self.winner == 2:
+                self.point_for_2 += 100
+                self.point_for_1 -= 10
+                break
+            elif self.winner == 3: # draw
+                self.point_for_1 += 10
+                # Accommadate player 2 move is fewer
+                self.point_for_2 += 20
+                break
+
+            if self.current_player == 1:
+                self.current_player = 2
+            else:
+                self.current_player = 1
+
+    def run_complex(self):
+        while True:
+            if self.current_player == 1:
+                move = self.ai_player1.get_move(self.board)
+                self.point_for_1 += 10
+            else:
+                move = self.ai_player2.get_move(self.board)
+                self.point_for_2 += 10
+
+            if not self.board.set_piece(move, self.current_player):
+                # The move is invalid, the game is over
+                if self.current_player == 1:
+                    self.point_for_1 -= 25
+                else:
+                    self.point_for_2 -= 25
+                break
+
+            self.winner = self.board.get_winner()
+            if self.winner == 1:
+                self.point_for_1 += 100
                 self.point_for_2 -= 5
                 break
             elif self.winner == 2:
@@ -597,7 +666,7 @@ class GeneralEvolutionTrainingBase:
         data["history"] = self.history
 
         with open(self.json_info_file, "w") as f:
-            json.dump(data, f, indent=4)
+            json.dump(data, f)
     
     def init_population(self):
         files = []
@@ -631,11 +700,15 @@ class GeneralEvolutionTrainingBase:
         self.population = [self.model_class(i) for i in range(self.population_size)]
 
     def evaluate_generation_populations(self):
+        accumulated_time = 0
+
         self.scores = []
         self.progress_bar.set_prefix(f"Generation {self.generation} ")
         self.progress_bar.reset(print_=True)
         for i, ai in enumerate(self.population):
-            avg_score = self.evaluate_one_population(ai)
+            start_time = time.time()
+            avg_score = round(self.evaluate_one_population(ai), 2)
+            accumulated_time += time.time() - start_time
             self.scores.append((i, avg_score))
             self.progress_bar.increment(True)
         
@@ -645,6 +718,7 @@ class GeneralEvolutionTrainingBase:
         generation_data = {}
         generation_data["generation"] = self.generation
         generation_data["scores"] = [score for _, score in self.scores]
+        generation_data["time"] = round(accumulated_time, 2)
 
         generation_data["params"] = {}
         generation_data["params"]["population_size"] = self.population_size
@@ -734,9 +808,8 @@ class EvolutionTraining(GeneralEvolutionTrainingBase):
         self.battle_controller.reset()
 
         scores = []
-        play_first = True
         for i in range(self.evaluate_count):
-            if play_first:
+            if i % 4 != 0:
                 self.battle_controller.ai_player1 = ai
                 self.battle_controller.ai_player2 = self.ai_trainning_opponent
             else:
@@ -746,7 +819,6 @@ class EvolutionTraining(GeneralEvolutionTrainingBase):
             self.battle_controller.run()
             scores.append(self.battle_controller.point_for_1)
             self.battle_controller.reset()
-            play_first = not play_first
 
         return sum(scores) / self.evaluate_count
 
@@ -782,7 +854,7 @@ if __name__ == "__main__":
         training = EvolutionTraining(TicTacToeAIPlayer,
                                      population_size=args.population, top_population=args.top,
                                      mutation_rate=args.mutation, evaluate_count=args.evaluate,
-                                     output_folder="output/tic_tac_toe_evolution")
+                                     output_folder="output/tic_tac_toe_evolution_5")
 
         training.load_info()
         training.init_population()
@@ -802,7 +874,7 @@ if __name__ == "__main__":
     elif args.command == "game":
         controller = GameResultNeuralNetworkController()
 
-        folder = "output/tic_tac_toe_evolution"
+        folder = "output/tic_tac_toe_evolution_5"
         training = EvolutionTraining(TicTacToeAIPlayer, output_folder=folder)
         training.load_info()
 
@@ -810,10 +882,10 @@ if __name__ == "__main__":
         file = training.history[-1]["files"][0]
 
         dum_ai = DumAIPlayer(2)
-        test_ai = TicTacToeAIPlayer(1)
-        test_ai.load_state_dict(torch.load(os.path.join(folder, file)))
+        nueral_ai = TicTacToeAIPlayer(1)
+        nueral_ai.load_state_dict(torch.load(os.path.join(folder, file)))
 
-        game = TicTacToeGame(controller, test_ai)
+        game = TicTacToeGame(controller, None, nueral_ai)
         curses.wrapper(TicTacToeGame.static_run)
 
 

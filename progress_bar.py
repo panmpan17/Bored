@@ -54,12 +54,16 @@ class ProgressBar:
         self.progress = progress
         self.print(print_new_line_if_done=print_new_line_if_done)
     
-    def print(self, print_new_line_if_done=False):
+    def export_progress(self):
         length = min(self.max_length, self.length)
         percent = ("{0:." + str(self.decimals) + "f}").format(100 * (self.progress / self.progress_length))
         filled_length = int(length * self.progress // self.progress_length)
         bar = self.fill * filled_length + '-' * (length - filled_length)
-        print(f'\r{self.prefix}{bar}| {percent}% {self.suffix}')
+
+        return f'{self.prefix}{bar}| {percent}% {self.suffix}'
+    
+    def print(self, print_new_line_if_done=False):
+        print(self.export_progress())
         sys.stdout.write("\x1b[1A" * (1 + self.prefix_line_count))
 
         # Print New Line on Complete
@@ -73,13 +77,26 @@ class ProgressBar:
 
 
 if __name__ == "__main__":
-    bar = ProgressBar(100, prefix="Name of Progressa dawdawd awd awd", length=100)
+    bar_1 = ProgressBar(100, prefix=f"Generation 0/100 ", length=100)
+    bar_2 = ProgressBar(10, prefix=f"0 Traninng ", length=100)
+    top_scores = []
 
-    for i in range(100):
-        try:
-            time.sleep(0.1)
-            # bar.increment()
-            bar.set_progress(i + 1)
-        except KeyboardInterrupt:
-            print("\n")
-            break
+    try:
+        for generation in range(100):
+            bar_1.set_prefix(f"Generation {generation + 1}/100 ")
+            bar_2.set_prefix(f"{bar_1.export_progress()}\nTop Scores: {",".join(top_scores)}\n{generation} Traninng ")
+            bar_2.reset(print_=True)
+
+            for i in range(10):
+                time.sleep(0.02)
+                # bar.increment()
+                bar_2.set_progress(i + 1)
+            
+            top_scores.insert(0, str(generation + 1))
+            if len(top_scores) > 5:
+                top_scores.pop(-1)
+            
+            bar_1.increment(print_new_line_if_done=False)
+
+    except KeyboardInterrupt:
+        print("\n")

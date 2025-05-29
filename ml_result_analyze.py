@@ -1,6 +1,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import json
+import os
+
+from argparse import ArgumentParser
+
+
 
 def test():
     #day one, the age and speed of 13 cars:
@@ -86,11 +91,22 @@ class ResultAnalyzer:
 
 
 if __name__ == "__main__":
+    parser = ArgumentParser(description="Analyze ML results from info.json files.")
+
+    parser.add_argument("-p", "--path", type=str, help="Path to the info.json file to analyze.",
+                        default="output/tic_tac_toe_evolution/info.json")
+
+    args = parser.parse_args()
+
+    if not os.path.exists(args.path):
+        print(f"Error: The file {args.path} does not exist.")
+        exit(1)
+
     # test()
     analyzer = ResultAnalyzer()
 
     # analyzer.read_from_info_json("first", "output/tic_tac_toe_evolution_1/info.json")
-    analyzer.read_from_info_json("second", "output/tic_tac_toe_evolution/info.json")
+    analyzer.read_from_info_json("second", args.path)
     # analyzer.read_from_info_json("third", "output/tic_tac_toe_evolution_3/info.json")
     
     analyzer.show()
