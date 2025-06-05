@@ -46,9 +46,10 @@ class ProgressBar:
         percent = ("{0:." + str(self.decimals) + "f}").format(100)
         self.max_length = self.terminal_size()[1] - len(lines[-1]) - len(self.suffix) - len(percent) - 3
 
-    def increment(self, print_new_line_if_done=False):
+    def increment(self, print_=True, print_new_line_if_done=False):
         self.progress += 1
-        self.print(print_new_line_if_done=print_new_line_if_done)
+        if print_:
+            self.print(print_new_line_if_done=print_new_line_if_done)
 
     def set_progress(self, progress, print_new_line_if_done=False):
         self.progress = progress

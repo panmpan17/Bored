@@ -640,11 +640,11 @@ class GeneralEvolutionTrainingBase:
         self.scores = []
         self.scores_reverse = True
 
+        self.top_scores = []
+
         self.population = []
         self.generation = 1
         self.history = []
-
-        self.progress_bar = ProgressBar(self.population_size, prefix="Generation 0 ")
     
     @property
     def json_info_file(self):
@@ -699,21 +699,25 @@ class GeneralEvolutionTrainingBase:
     def init_random_population(self):
         self.population = [self.model_class(i) for i in range(self.population_size)]
 
-    def evaluate_generation_populations(self):
+    def evaluate_generation_populations(self, progress_bar_prefix: str = ""):
         accumulated_time = 0
 
         self.scores = []
-        self.progress_bar.set_prefix(f"Generation {self.generation} ")
-        self.progress_bar.reset(print_=True)
+        progress_bar = ProgressBar(self.population_size, prefix="Generation 0 ")
+        progress_bar.set_prefix(f"{progress_bar_prefix}\nTop Scores: {",".join(self.top_scores)}\n{self.generation} Traninng ")
+        progress_bar.reset(print_=True)
         for i, ai in enumerate(self.population):
             start_time = time.time()
             avg_score = round(self.evaluate_one_population(ai), 2)
             accumulated_time += time.time() - start_time
             self.scores.append((i, avg_score))
-            self.progress_bar.increment(True)
+            progress_bar.increment(print_new_line_if_done=False)
         
         self.scores.sort(key=lambda x: x[1], reverse=self.scores_reverse)
-        print("Top population scores:", ",".join([str(score) for _, score in self.scores[:self.top_population]]))
+        self.top_scores.insert(0, str(round(self.scores[0][1], 2)))
+
+        if len(self.top_scores) > 10:
+            self.top_scores.pop()
 
         generation_data = {}
         generation_data["generation"] = self.generation
@@ -773,16 +777,22 @@ class GeneralEvolutionTrainingBase:
             new_ai.mutate(self.mutation_rate)
             new_population.append(new_ai)
         
-        print(f"New population size: {len(new_population)} readying for next generation")
+        # print(f"New population size: {len(new_population)} readying for next generation")
         self.population = new_population
         self.generation += 1
         self.scores.clear()
 
     def start_generation_training(self, generation_count: int = 10):
+        bar_1 = ProgressBar(generation_count, prefix=f"Generation 0/{generation_count} ", length=100)
+
         for i in range(args.generation):
-            training.evaluate_generation_populations()
+            bar_1.set_prefix(f"Generation {i + 1}/{generation_count} ")
+
+            training.evaluate_generation_populations(progress_bar_prefix=bar_1.export_progress())
             if i != args.generation - 1:
                 training.next_generation()
+
+            bar_1.increment(print_=False)
         
         training.save_top_population()
         training.dump_info()
@@ -837,6 +847,7 @@ if __name__ == "__main__":
     evolution.add_argument("-m", "--mutation", type=float, default=0.05, help="Mutation rate")
     evolution.add_argument("-e", "--evaluate", type=int, default=20, help="Evaluate game count")
     evolution.add_argument("-g", "--generation", type=int, default=10, help="Generation count")
+    evolution.add_argument("-o", "--output", type=str, default="output/tic_tac_toe_evolution", help="Output folder")
 
     test_parser = sub.add_parser("test", help="Test the model")
 
@@ -854,7 +865,7 @@ if __name__ == "__main__":
         training = EvolutionTraining(TicTacToeAIPlayer,
                                      population_size=args.population, top_population=args.top,
                                      mutation_rate=args.mutation, evaluate_count=args.evaluate,
-                                     output_folder="output/tic_tac_toe_evolution_5")
+                                     output_folder=args.output)
 
         training.load_info()
         training.init_population()
