@@ -63,6 +63,20 @@ if __name__ == '__main__':
 
     time_parser = sub.add_parser("usa-time", help="Time calculate")
 
+    tw_parser = sub.add_parser("tw", help="TW stock calculate")
+
+    tw_sub_parser = tw_parser.add_subparsers(dest='tw_command')
+    
+    sell_parser = tw_sub_parser.add_parser("sell", help="TW stock sell calculate")
+    sell_parser.add_argument("stock_price", type=float, help="Stock price")
+    sell_parser.add_argument("amount", type=int, help="Stock amount")
+    sell_parser.add_argument("-f", "--fee_discount", type=float, help="Transaction fee discount", default=0.6)
+
+    buy_parser = tw_sub_parser.add_parser("buy", help="TW stock buy calculate")
+    buy_parser.add_argument("stock_price", type=float, help="Stock price")
+    buy_parser.add_argument("amount", type=int, help="Stock amount")
+    buy_parser.add_argument("-f", "--fee_discount", type=float, help="Transaction fee discount", default=0.6)
+
 
     args = parser.parse_args()
 
@@ -71,4 +85,16 @@ if __name__ == '__main__':
         
     elif args.command == 'usa-time':
         print_usa_time()
+    
+    elif args.command == 'tw':
+        if args.tw_command == 'sell':
+            original_sell = round(args.stock_price * args.amount, 2)
+            tax = round(original_sell * 0.003, 2)
+            transaction_fee = round(original_sell * 0.001425 * args.fee_discount, 2)
+            print(f"TW stock sell get: {original_sell} - {tax} (0.003) - {transaction_fee} (0.001425 * {args.fee_discount}) = {original_sell - tax - transaction_fee}")
+
+        elif args.tw_command == 'buy':
+            original_need = round(args.stock_price * args.amount, 2)
+            transaction_fee = round(original_need * 0.001425 * args.fee_discount, 2)
+            print(f"TW stock buy need: {original_need} + {transaction_fee} (0.001425 * {args.fee_discount}) = {original_need + transaction_fee}")
 
