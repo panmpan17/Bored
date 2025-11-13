@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+
+    <style>
+        svg > rect {
+            cursor: pointer;
+            fill: black;
+        }
+        svg > rect:hover {
+            fill: rgb(106, 106, 106);
+        }
+
+        svg > polygon {
+            cursor: pointer;
+            fill: url(#slider-gradient);
+            /* fill: linear-gradient(to right, #FEB641, #ED5383); */
+        }
+    </style>
+</head>
+<body>
+    <svg width="0" height="0" xmlns="http://www.w3.org/2000/svg" style="position: fixed;">
+        <defs>
+            <linearGradient id="slider-gradient">
+                <stop offset="0" stop-color="#FEB641"/>
+                <stop offset="1" stop-color="#ED5383"/>
+            </linearGradient>
+        </defs>
+    </svg>
+
+    <svg width="1000" height="100" viewBox="0 0 1000 100" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" style="background-color: lightgray;">
+        <line x1="0" y1="25" x2="1000" y2="25" stroke="darkgray" />
+        <line x1="0" y1="50" x2="1000" y2="50" stroke="darkgray" />
+        <line x1="0" y1="75" x2="1000" y2="75" stroke="darkgray" />
+
+        <line x1="60" y1="0" x2="60" y2="100" stroke="darkgray" />
+        <line x1="120" y1="0" x2="120" y2="100" stroke="darkgray" />
+        <line x1="180" y1="0" x2="180" y2="100" stroke="darkgray" />
+        <line x1="240" y1="0" x2="240" y2="100" stroke="darkgray" />
+        <line x1="300" y1="0" x2="300" y2="100" stroke="darkgray" />
+        <line x1="360" y1="0" x2="360" y2="100" stroke="darkgray" />
+        <line x1="420" y1="0" x2="420" y2="100" stroke="darkgray" />
+        <line x1="480" y1="0" x2="480" y2="100" stroke="darkgray" />
+        <line x1="540" y1="0" x2="540" y2="100" stroke="darkgray" />
+        <line x1="600" y1="0" x2="600" y2="100" stroke="darkgray" />
+        <line x1="660" y1="0" x2="660" y2="100" stroke="darkgray" />
+        <line x1="720" y1="0" x2="720" y2="100" stroke="darkgray" />
+
+        <rect x="0" y="0" width="60" height="25" />
+        <rect x="60" y="25" width="60" height="25" />
+        <rect x="120" y="50" width="60" height="25" />
+        <rect x="180" y="75" width="60" height="25" />
+
+        <polygon points="240,0 240,25 400,100 400,75" />
+
+        <polygon points="400,0 400,25 500,100 600,25 600,0 500,75" />
+    </svg>
+</body>
+</html>

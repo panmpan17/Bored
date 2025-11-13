@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pooled Audio Player</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Light blue-gray background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            /* min-height: 100vh; */
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 32px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        .title {
+            color: #1a202c; /* Dark text */
+            margin-bottom: 24px;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .input-field {
+            padding: 12px 16px;
+            border: 1px solid #cbd5e0; /* Light gray border */
+            border-radius: 8px;
+            font-size: 1rem;
+            color: #2d3748; /* Medium dark text */
+            outline: none;
+            transition: border-color 0.2s ease-in-out;
+        }
+        .input-field:focus {
+            border-color: #4299e1; /* Blue focus border */
+        }
+        .button-group {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .btn-primary {
+            background-color: #4299e1; /* Blue */
+            color: #ffffff;
+        }
+        .btn-primary:hover {
+            background-color: #3182ce; /* Darker blue */
+            transform: translateY(-2px);
+        }
+        .btn-secondary {
+            background-color: #e2e8f0; /* Light gray */
+            color: #2d3748;
+        }
+        .btn-secondary:hover {
+            background-color: #cbd5e0; /* Darker light gray */
+            transform: translateY(-2px);
+        }
+        .message-box {
+            background-color: #fff3cd; /* Light yellow for warnings */
+            border: 1px solid #ffeeba;
+            color: #856404;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none; /* Hidden by default */
+            text-align: left;
+            word-break: break-word;
+        }
+        .message-box.show {
+            display: block;
+        }
+        .message-box.error {
+            background-color: #f8d7da; /* Light red for errors */
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .message-box.success {
+            background-color: #d4edda; /* Light green for success */
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-3xl font-bold title">Pooled Audio Player</h1>
+        <div class="input-group">
+            <input type="text" id="audioUrl" class="input-field" value="http://127.0.0.1:2325/audio/piano/f2.mp3">
+            <input type="number" id="volume" class="input-field" value="0.5" step="0.1" min="0" max="1" placeholder="Volume (0.0 - 1.0)">
+        </div>
+        <div class="button-group">
+            <button id="playButton" class="btn btn-primary">Play Audio</button>
+            <button id="clearCacheButton" class="btn btn-secondary">Clear All Audio Pools</button>
+        </div>
+        <div id="messageBox" class="message-box"></div>
+    </div>
+
+    <button class="btn btn-primary" onclick="played()">Test</button>
+
+    <script>
+        // audioPool stores arrays of Audio elements for each sound URL.
+        // Each array represents a pool of instances for that specific sound.
+        const audioPool = new Map();
+        // Maximum number of concurrent instances for a single sound.
+        // This prevents creating an infinite number of Audio elements for one sound.
+        const MAX_INSTANCES_PER_SOUND = 100;
+
+        const audioUrlInput = document.getElementById('audioUrl');
+        const volumeInput = document.getElementById('volume');
+        const playButton = document.getElementById('playButton');
+        const clearCacheButton = document.getElementById('clearCacheButton');
+        const messageBox = document.getElementById('messageBox');
+
+        /**
+         * Displays a message in the message box.
+         * @param {string} message The message to display.
+         * @param {string} type The type of message (e.g., 'success', 'error', 'warning').
+         */
+        function showMessage(message, type = 'warning') {
+            messageBox.textContent = message;
+            messageBox.className = `message-box show ${type}`;
+            setTimeout(() => {
+                messageBox.classList.remove('show');
+            }, 5000); // Hide after 5 seconds
+        }
+
+        /**
+         * Plays an audio file, utilizing a pool system for concurrent playback and memory management.
+         * @param {string} soundUrl The URL of the audio file.
+         * @param {number} volume The volume (0.0 to 1.0).
+         */
+        function playAudio(soundUrl, volume) {
+            // Get or create the pool for this specific sound URL
+            if (!audioPool.has(soundUrl)) {
+                audioPool.set(soundUrl, []);
+            }
+            const soundInstances = audioPool.get(soundUrl);
+            let htmlAudio = null;
+
+            // 1. Try to find an available (paused or ended) audio element in the pool
+            for (let i = 0; i < soundInstances.length; i++) {
+                if (soundInstances[i].paused || soundInstances[i].ended) {
+                    htmlAudio = soundInstances[i];
+                    console.log('Reusing audio instance from pool:', soundUrl);
+                    showMessage('Reusing audio instance: ' + soundUrl, 'success');
+                    break;
+                }
+            }
+
+            // 2. If no available element, and we haven't reached the max instances, create a new one
+            if (!htmlAudio && soundInstances.length < MAX_INSTANCES_PER_SOUND) {
+                htmlAudio = new Audio();
+                htmlAudio.src = soundUrl; // Set source once
+                soundInstances.push(htmlAudio); // Add to pool
+                console.log('Created new audio instance for pool:', soundUrl);
+                showMessage('Created new audio instance: ' + soundUrl, 'warning');
+
+                // Set up error handler for new audio elements
+                htmlAudio.onerror = function () {
+                    console.error('Error loading or playing sound:', soundUrl, htmlAudio.error);
+                    showMessage('Error loading or playing sound: ' + soundUrl + '. Error code: ' + htmlAudio.error.code, 'error');
+                    // Optionally remove problematic instance from pool if it consistently fails
+                    // const index = soundInstances.indexOf(htmlAudio);
+                    // if (index > -1) {
+                    //     soundInstances.splice(index, 1);
+                    // }
+                };
+                // onended listener is not strictly needed for pooling, as we check paused/ended state.
+                // However, it can be useful for debugging or other logic.
+                htmlAudio.onended = function() {
+                    console.log('Audio finished playing:', soundUrl);
+                };
+
+            } else if (!htmlAudio) {
+                // If no available element and max instances reached
+                console.warn('Max instances reached for sound:', soundUrl, '. Cannot play new instance.');
+                showMessage('Max instances reached for ' + soundUrl + '. Try again later.', 'warning');
+                return; // Do not attempt to play
+            }
+
+            // Always set volume and play the chosen/new audio element
+            htmlAudio.volume = volume;
+            htmlAudio.currentTime = 0; // Reset to start for reuse
+            htmlAudio.play()
+                .then(() => {
+                    console.log('Audio played successfully:', soundUrl);
+                })
+                .catch(error => {
+                    console.error('Playback failed (e.g., user gesture required or other error):', error);
+                    showMessage('Playback failed. Browser might require user interaction (click) to play audio. Error: ' + error.message, 'error');
+                });
+        }
+
+        /**
+         * Clears all audio elements from all pools and attempts to release their resources.
+         */
+        function clearAllAudioPools() {
+            audioPool.forEach((soundInstances, url) => {
+                soundInstances.forEach(audioElement => {
+                    try {
+                        audioElement.pause();
+                        audioElement.removeAttribute('src'); // Clear the source
+                        audioElement.load(); // Attempt to free resources
+                        console.log('Released audio instance from pool:', url);
+                    } catch (e) {
+                        console.warn('Error releasing audio element from pool:', url, e);
+                    }
+                });
+            });
+            audioPool.clear();
+            console.log('All audio pools cleared.');
+            showMessage('All audio pools cleared successfully!', 'success');
+        }
+
+        // Event Listeners
+        playButton.addEventListener('click', () => {
+            const url = audioUrlInput.value.trim();
+            const volume = parseFloat(volumeInput.value);
+
+            if (!url) {
+                showMessage('Please enter an audio URL.', 'error');
+                return;
+            }
+            if (isNaN(volume) || volume < 0 || volume > 1) {
+                showMessage('Please enter a valid volume between 0.0 and 1.0.', 'error');
+                return;
+            }
+
+            playAudio(url, volume);
+        });
+
+        clearCacheButton.addEventListener('click', clearAllAudioPools);
+
+        // Example usage (optional, for testing)
+        window.onload = () => {
+            // audioUrlInput.value = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+            volumeInput.value = 0.5;
+        };
+
+
+        // caches.add("/audio/piano/f2.mp3").then(() => {
+        //     console.log("Audio file cached successfully.");
+        // }).catch(err => {
+        //     console.error("Failed to cache audio file:", err);
+        // });
+
+        // caches.open('myCache').then((cache) => {
+        //     cache.add('audio/piano/f2.mp3').then(() => {
+        //         console.log('cached');
+        //     });
+        // });
+
+        function played() {
+            loadAudioFromCache("audio/piano/f2.mp3", (audioContent) => {
+                let audioEl = document.createElement('audio');
+                audioEl.src = URL.createObjectURL(audioContent);
+                audioEl.play().then(() => {
+                    console.log('Audio played from cache successfully.');
+                }).catch(err => {
+                    console.error('Error playing cached audio:', err);
+                });
+            });
+        }
+
+        function loadAudioFromCache(url, callbackFunc) {
+            caches.open('myCache').then((cache) => {
+                let result = cache.match(url).then((cachedAudio) => {
+                    cachedAudio.blob().then(cont => {
+                        callbackFunc(cont);
+                    });
+                });
+            });
+        }
+    </script>
+</body>
+</html>
